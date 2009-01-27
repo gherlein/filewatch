@@ -2,7 +2,7 @@
 
   gch_filewatch.c
 
-  Copyright (c) 1997-2008 Gregory C. Herlein.
+  Copyright (c) 2008 Gregory C. Herlein.
   
   Written by Greg Herlein <gherlein@herlein.com>
   
@@ -49,13 +49,14 @@ void print_event(struct inotify_event *event)
   return;
 }
 /*----------------------------------------------------------------------*/
-void gch_log(char* szMessage)
+static void
+locallog(char* szMessage)
 {
   syslog(LOG_DAEMON|LOG_DEBUG,szMessage);
   return;
 }
 /*----------------------------------------------------------------------*/
-int main(void)
+int main(int argc,char *argv[])
 {
   int                     fd,wd,x;
   ssize_t                 len,i;
@@ -99,7 +100,7 @@ int main(void)
                                        IN_CLOSE_WRITE);
 
     sprintf(szMessage,"watching %s",watch_list[x].szFile);
-    gch_log(szMessage);
+    locallog(szMessage);
   }
   
 
@@ -120,7 +121,7 @@ int main(void)
 //          printf("%s COMMAND: %s\n",pwatch_list->szFile,pwatch_list->szCommand);
             system(watch_list[x].szCommand);
             sprintf(szMessage,"executed: %s",watch_list[x].szCommand);
-            gch_log(szMessage);
+            locallog(szMessage);
           }
         }
       }

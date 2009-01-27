@@ -19,3 +19,11 @@ clean:
 
 tags:
 	etags *.[ch] *.[ch] 
+
+
+commit:
+	git commit
+
+
+push:
+	 git push --all
