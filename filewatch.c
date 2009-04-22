@@ -10,7 +10,7 @@
 
 /*----------------------------< Defines >-------------------------------*/
 #define QUEUE_LEN 128
-#define MAX_WATCH_FILES 4
+#define MAX_WATCH_FILES 5
 /*----------------------------< Includes >------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,6 +84,10 @@ int main(int argc,char *argv[])
   strcpy(watch_list[3].szFile,"/home/dbf/TENTFILE.DBF");
   sprintf(watch_list[3].szCommand,"/usr/local/bin/watchfile.pl %s",
           watch_list[3].szFile);
+
+  strcpy(watch_list[4].szFile,"/home/dbf/ZIMBRA.DBF");
+  sprintf(watch_list[4].szCommand,"/usr/local/bin/zimbra-contacts.sh %s",
+          watch_list[4].szFile);
 
   fd=inotify_init();
   if(fd==-1)
