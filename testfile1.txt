@@ -54,7 +54,7 @@ int main(int argc,char *argv[])
   int                     num_watch_files=0;
   int                     nDiff=0;
   char                    szMD5new[BUF_LEN];
-  int                     sleep_time=60;
+  int                     sleep_seconds=5;
   
   if(argc>1)
   {
@@ -75,19 +75,6 @@ int main(int argc,char *argv[])
   {
     num_watch_files=atoi(szBuffer);
   }
-  
-  /* get the sleep time  */
-  x=ReadIniArg(szFile, FILEWATCH,"sleep_time",szBuffer,BUF_LEN);
-  if(x)
-  {
-    sleep_time=atoi(szBuffer);
-  }
-
-  sprintf(szMessage,"watching %d files every %d seconds",
-          num_watch_files,sleep_time);
-  locallog(szMessage);
-  
-
   
   /* set up the basic paramters */
   ReadFileData(szFile,num_watch_files);
@@ -149,7 +136,7 @@ int main(int argc,char *argv[])
 #ifdef POLLING_METHOD
   while(1)
   {
-    sleep(sleep_time);
+    sleep(sleep_seconds);
     for(x=0;x<num_watch_files;x++)
     {
       /* check the MD5 to see if the file changed */
@@ -159,10 +146,6 @@ int main(int argc,char *argv[])
       {
         DoFileCommand(x);
         strcpy(watch_list[x].szMD5,szMD5new);
-        sprintf(szMessage,"file %s new MD5: %s",
-                watch_list[x].szFile,
-                watch_list[x].szMD5);
-        locallog(szMessage);
       }
     }
   }
