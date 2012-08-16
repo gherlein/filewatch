@@ -5,16 +5,16 @@
 # It is necessary for linking the library.
 
 # The name that we can dlopen(3).
-dlname='libconfig++.9.dylib'
+dlname='libconfig++.so.9'
 
 # Names of this library.
-library_names='libconfig++.9.dylib libconfig++.dylib'
+library_names='libconfig++.so.9.1.2 libconfig++.so.9 libconfig++.so'
 
 # The name of the static archive.
 old_library='libconfig++.a'
 
 # Linker flags that can not go in dependency_libs.
-inherited_linker_flags=' '
+inherited_linker_flags=''
 
 # Libraries that this one depends upon.
 dependency_libs=''

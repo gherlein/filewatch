@@ -75,7 +75,7 @@
 #define STDC_HEADERS 1
 
 /* Configured target name. */
-#define TARGET "i386-apple-darwin11.4.0"
+#define TARGET "x86_64-unknown-linux-gnu"
 
 /* Enable extensions on AIX 3, Interix.  */
 #ifndef _ALL_SOURCE
@@ -104,7 +104,7 @@
 
 /* Define to 1 if `lex' declares `yytext' as a `char *' by default, not a
    `char[]'. */
-#define YYTEXT_POINTER 1
+/* #undef YYTEXT_POINTER */
 
 /* Define to 1 if on MINIX. */
 /* #undef _MINIX */
