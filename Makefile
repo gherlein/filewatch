@@ -20,6 +20,7 @@ filewatch: $(OBJS) filewatch.c inifile.c md5c.c
 
 clean:
 	rm -f *.o *~ TAGS core $(TARGET)
+	cd libconfig-1.4.8;make clean
 
 tags:
 	etags *.[ch] *.[ch] 
