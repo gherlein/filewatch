@@ -200,11 +200,8 @@ scanDirectory(const char* dir,const char* pattern)
     while (ep = readdir (dp))
     {
       //puts (ep->d_name);
-      int n=fnmatch (pattern, ep->d_name, 0);
-      if(n==0)
-      {
-        printf ("match: %s\n",ep->d_name);
-      }
+      int n=fnmatch (pattern, ep->d_name, FNM_CASEFOLD);
+      printf ("n: %d",n);
     }
     (void) closedir (dp);
   }

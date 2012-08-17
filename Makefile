@@ -3,7 +3,7 @@ CFLAGS     = -ggdb
 OUTFLAG    = -o
 LDFLAGS    = 		
 LIBS       = -lconfig			
-OBJS       = inifile.o md5c.o
+OBJS       = md5c.o
 TARGET     = filewatch
 
 all:  $(TARGET)
