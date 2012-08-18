@@ -27,8 +27,15 @@ tags:
 
 
 commit:
-	git commit
+	git add *
+	git commit -m
 
 
 push:
-	 git push --all
+	 git push origin version2
+
+
+run: filewatch
+	clear;./$(TARGET) test.cfg
+
+

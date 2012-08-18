@@ -16,6 +16,9 @@
 #define BUF_LEN   256
 #define MAX_WATCH_FILES 1024
 
+#define OPCODE_READ  1
+#define OPCODE_WRITE 2
+
 /*----------------------------< Includes >------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,9 +32,6 @@
 #include <libconfig.h>
 
 /*--------------------------< Declarations >----------------------------*/
-int scanDirectory(const char* dir,const char* pattern);
-
-
 //int ReadFileData(char* szIni,int num_files);
 void print_event(struct inotify_event *event);
 static void locallog(char* szMessage);
@@ -48,6 +48,107 @@ struct watch_list_t
 struct watch_list_t     watch_list[MAX_WATCH_FILES];
 
 /*-------------------------< Local Variables >--------------------------*/
+/*----------------------------------------------------------------------*/
+int
+md5fileop(const char* filename,char* buffer, int opcode)
+{
+  FILE *file;
+  unsigned long len;
+
+  if(opcode==OPCODE_READ)
+  {
+    file = fopen(filename, "rb");
+    if (!file)
+    {
+      return -1;
+    }
+    
+    fseek(file, 0, SEEK_END);
+    len=ftell(file);
+    fseek(file, 0, SEEK_SET);
+    
+    fread(buffer, len, 1, file);
+    fclose(file);
+    
+    return len;
+  }
+  if(opcode==OPCODE_WRITE)
+  {
+    file = fopen(filename, "wb");
+    if (!file)
+    {
+      return -1;
+    }
+
+    len=strlen(buffer);
+    fwrite(buffer, len, 1, file);
+    fclose(file);
+    
+    return len;
+    
+  }
+  
+  return -1;
+}
+/*----------------------------------------------------------------------*/
+int
+scanDirectory(const char* dir,const char* pattern)
+{
+  DIR *dp;
+  struct dirent *ep;
+  char szMD5New[256];
+  char szMD5Old[256];
+  char szFile[256];
+  char szFile5[256];
+  
+  dp = opendir (dir);
+  if (dp != NULL)
+  {
+    while (ep = readdir (dp))
+    {
+      int n=fnmatch (pattern, ep->d_name, 0);
+      if(n==0)
+      {
+        // look to see if an md5 file exists
+        sprintf(szFile,"%s/%s",dir,ep->d_name);
+        sprintf(szFile5,"%s.%s",szFile,"md5");
+        int md5len=md5fileop(szFile5,szMD5Old,OPCODE_READ);
+        if(md5len>0)
+        {
+          // exists
+          int len=MD5File(szFile,szMD5New);
+          int match=strncmp(szMD5New,szMD5Old,len);
+          if(match==0)
+          {
+            printf("old md5 detected and matched: [%s]\n",szMD5Old);
+          } else
+          {
+            printf("NEW md5!\n");
+          }
+        } else
+        {
+          // did not exist
+          int len=MD5File(szFile,szMD5New);
+          printf("new md5 generated: [%s]\n",szMD5New);
+          int md5len=md5fileop(szFile5,szMD5New,OPCODE_WRITE);
+        }
+        
+        
+      }
+    }
+    (void) closedir (dp);
+  }
+  else
+    perror ("Couldn't open the directory");
+
+  return 0;
+}
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
 /*----------------------------------------------------------------------*/
 
 int main(int argc,char *argv[])
@@ -187,39 +288,6 @@ int main(int argc,char *argv[])
 #endif
   
 }
-/*----------------------------------------------------------------------*/
-int
-scanDirectory(const char* dir,const char* pattern)
-{
-  DIR *dp;
-  struct dirent *ep;
-
-  dp = opendir (dir);
-  if (dp != NULL)
-  {
-    while (ep = readdir (dp))
-    {
-      //puts (ep->d_name);
-      int n=fnmatch (pattern, ep->d_name, 0);
-      if(n==0)
-      {
-        printf ("match: %s\n",ep->d_name);
-      }
-    }
-    (void) closedir (dp);
-  }
-  else
-    perror ("Couldn't open the directory");
-
-  return 0;
-}
-/*----------------------------------------------------------------------*/
-/*----------------------------------------------------------------------*/
-/*----------------------------------------------------------------------*/
-/*----------------------------------------------------------------------*/
-/*----------------------------------------------------------------------*/
-/*----------------------------------------------------------------------*/
-/*----------------------------------------------------------------------*/
 void
 DoFileCommand(int x)
 {
