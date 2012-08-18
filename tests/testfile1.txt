@@ -1,0 +1,237 @@
+/*----------------------------------------------------------------------*\
+
+  filewatch.c
+
+  Copyright (c) 2008-2009 Gregory C. Herlein.
+  
+  Written by Greg Herlein <gherlein@herlein.com>
+  
+------------------------------------------------------------------------*/
+
+/*----------------------------< Defines >-------------------------------*/
+#define DEBUG_PRINT
+#define POLLING_METHOD
+
+#define QUEUE_LEN 128
+#define BUF_LEN   256
+#define MAX_WATCH_FILES 16
+#define FILEWATCH "filewatch"
+
+/*----------------------------< Includes >------------------------------*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <syslog.h>
+#include <linux/inotify.h>
+
+/*--------------------------< Declarations >----------------------------*/
+int ReadFileData(char* szIni,int num_files);
+void print_event(struct inotify_event *event);
+static void locallog(char* szMessage);
+void        DoFileCommand(int x);
+
+struct watch_list_t
+{
+  char         szFile[BUF_LEN];
+  char         szCommand[BUF_LEN];
+  char         szMD5[BUF_LEN];
+  int          wd;
+};
+/*------------------------< Global Variables >--------------------------*/
+struct watch_list_t     watch_list[MAX_WATCH_FILES];
+/*-------------------------< Local Variables >--------------------------*/
+/*----------------------------------------------------------------------*/
+int main(int argc,char *argv[])
+{
+  int                     fd,wd,x;
+  ssize_t                 len,i;
+  struct inotify_event    equeue[QUEUE_LEN];
+  struct watch_list_t*    pwatch_list = watch_list;
+  char                    szCommand[BUF_LEN];
+  char                    szMessage[BUF_LEN];
+  char*                   szFile=NULL;
+  char                    szBuffer[BUF_LEN];
+  int                     num_watch_files=0;
+  int                     nDiff=0;
+  char                    szMD5new[BUF_LEN];
+  int                     sleep_seconds=5;
+  
+  if(argc>1)
+  {
+    szFile=argv[1];
+  } else
+  {
+    printf("Use:  %s [ini filename]\n",argv[0]);
+    exit(-1);
+  }
+  
+#ifdef DAEMONIZE  
+  daemon();
+#endif
+  
+  /* get the number of files to watch */
+  x=ReadIniArg(szFile, FILEWATCH,"num_files",szBuffer,BUF_LEN);
+  if(x)
+  {
+    num_watch_files=atoi(szBuffer);
+  }
+  
+  /* set up the basic paramters */
+  ReadFileData(szFile,num_watch_files);
+  memset(equeue,0,sizeof(struct inotify_event)*QUEUE_LEN);
+  fd=inotify_init();
+  if(fd==-1)
+  {
+    perror("inotify_init");
+    exit(EXIT_FAILURE);
+  }
+
+  /* do the work */
+  for(x=0;x<num_watch_files;x++)
+  {
+    watch_list[x].wd=inotify_add_watch(fd,
+                                       watch_list[x].szFile,
+                                       IN_CLOSE_WRITE);
+
+    sprintf(szMessage,"watching %s",watch_list[x].szFile);
+    locallog(szMessage);
+  }
+
+#ifdef EVENT_QUEUE_METHOD  
+  while(1)
+  {
+    len = read (fd,equeue,QUEUE_LEN);
+    i=0;
+    while(i<len)
+    {
+      struct inotify_event *event = (struct inotify_event*) &equeue[i];
+      if(event->mask && IN_CLOSE_WRITE)
+      {
+        print_event(event);
+        for(x=0;x<MAX_WATCH_FILES;x++)
+        {
+          if(event->wd == watch_list[x].wd)
+          {
+            sprintf(szMessage,"file %s closed",watch_list[x].szFile);
+            locallog(szMessage);
+
+            /* check the MD5 to see if the file changed */
+            MD5File(watch_list[x].szFile,szMD5new);
+            nDiff=strcmp(watch_list[x].szMD5,szMD5new);
+            if(nDiff)
+            {
+              DoFileCommand(x);
+              strcpy(watch_list[x].szMD5,szMD5new);
+            }
+          }
+        }
+      }
+      i++;
+    }
+    sleep(2);
+  }
+  inotify_rm_watch(fd);
+#endif
+
+#ifdef POLLING_METHOD
+  while(1)
+  {
+    sleep(sleep_seconds);
+    for(x=0;x<num_watch_files;x++)
+    {
+      /* check the MD5 to see if the file changed */
+      MD5File(watch_list[x].szFile,szMD5new);
+      nDiff=strcmp(watch_list[x].szMD5,szMD5new);
+      if(nDiff)
+      {
+        DoFileCommand(x);
+        strcpy(watch_list[x].szMD5,szMD5new);
+      }
+    }
+  }
+#endif
+  
+}
+/*----------------------------------------------------------------------*/
+void
+DoFileCommand(int x)
+{
+  char                    szMessage[BUF_LEN];
+
+  system(watch_list[x].szCommand);
+  sprintf(szMessage,"executed: %s",watch_list[x].szCommand);
+  locallog(szMessage);
+}
+/*----------------------------------------------------------------------*/
+int
+ReadFileData(char* szIni, int num_files)
+{
+  char szBase[]="file_";
+  char szFile[16];
+  int  x=0;
+  int  n=0;
+
+  num_files++;
+  for(x=0;x<num_files;x++)
+  {
+    sprintf(szFile,"%s%d",szBase,x+1);
+    n=ReadIniArg(szIni,szFile,"filename",
+                 watch_list[x].szFile,
+                 BUF_LEN);
+    if(n=0) return -1;
+      
+    n=ReadIniArg(szIni,szFile,"script",
+                 watch_list[x].szCommand,
+                 BUF_LEN);
+    if(n==0) return -1;
+
+    MD5File(watch_list[x].szFile,watch_list[x].szMD5);
+
+#ifdef DEBUG_PRINT
+    printf("%d: %s [%s] {%s}\n",
+           x,
+           watch_list[x].szFile,
+           watch_list[x].szCommand,
+           watch_list[x].szMD5);
+#endif
+    
+  }
+  return x+1;
+}
+
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+void print_event(struct inotify_event *event)
+{
+  if(event->len > 0)
+  {
+    printf("NAME: %s - ",event->name);
+  }
+  if(event->mask & IN_ACCESS) printf("IN_ACCESS ");
+  if(event->mask & IN_MODIFY) printf("IN_MODIFY ");
+  if(event->mask & IN_CLOSE_WRITE) printf("IN_CLOSE_WRITE ");
+  if(event->mask & IN_CLOSE_NOWRITE) printf("IN_CLOSE_NOWRITE ");
+  if(event->mask & IN_OPEN) printf("IN_OPEN ");
+  if(event->mask & IN_MOVED_FROM) printf("IN_MOVED_FROM ");
+  if(event->mask & IN_MOVED_TO) printf("IN_MOVED_TO ");
+  if(event->mask & IN_DELETE_SELF) printf("IN_DELETE_SELF ");
+  if(event->mask & IN_MOVE_SELF) printf("IN_MOVE_SELF ");
+  printf("\n");
+  return;
+}
+/*----------------------------------------------------------------------*/
+static void
+locallog(char* szMessage)
+{
+  syslog(LOG_DAEMON|LOG_DEBUG,szMessage);
+#ifdef DEBUG_PRINT
+  printf("%s\n",szMessage);
+#endif  
+  
+  return;
+}
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+
+
+
