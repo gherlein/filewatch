@@ -1,5 +1,5 @@
 CC         = gcc
-CFLAGS     = -ggdb
+CFLAGS     = -ggdb -Wall
 OUTFLAG    = -o
 LDFLAGS    = 		
 LIBS       = -lconfig			
