@@ -35,7 +35,8 @@ push:
 	 git push origin version2
 
 
-run: filewatch
-	clear;./$(TARGET) test.cfg
+test: filewatch
+	clear;
+	./$(TARGET) tests/test.cfg
 
 

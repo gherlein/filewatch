@@ -210,11 +210,14 @@ genMD5(const char* dir, const char* file,const char* file5)
 {
   char szMD5New[256];
   
-  int len=MD5File(file,szMD5New);
-  sprintf(szMessage,"new md5 [%s] generated for [%s]",szMD5New,file);
-  locallog(szMessage);
-  int md5len=md5fileop(file5,szMD5New,OPCODE_WRITE);
-  
+  int len=MD5File((char*)file,szMD5New);
+  if(len>0)
+  {
+    sprintf(szMessage,"new md5 [%s] generated for [%s]",szMD5New,file);
+    locallog(szMessage);
+    int md5len=md5fileop(file5,szMD5New,OPCODE_WRITE);
+    return md5len;
+  } else return -1;
 }
 /*----------------------------------------------------------------------*/
 int
@@ -230,7 +233,7 @@ scanDirectory(const char* dir,const char* pattern,const char* script)
   dp = opendir (dir);
   if (dp != NULL)
   {
-    while (ep = readdir (dp))
+    while ((ep = readdir (dp)))
     {
       int n=fnmatch (pattern, ep->d_name, 0);
       if(n==0)
