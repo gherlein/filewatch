@@ -9,6 +9,7 @@
 ------------------------------------------------------------------------*/
 
 /*----------------------------< Includes >------------------------------*/
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +47,7 @@ int main(int argc,char *argv[])
   char*                   szFile=NULL;
   int                     num_watch_files=0;
   int                     sleep_time=60;
+  int                     run=1;
 #if 0
   int                     fd,wd,x;
   ssize_t                 len,i;
@@ -66,10 +68,14 @@ int main(int argc,char *argv[])
     exit(-1);
   }
   
+#ifdef DAEMONIZE  
+//  daemon();
+#endif
   config_init(&cfg);
 
   printf("reading config file [%s]\n",szFile);
 
+  
   if(! config_read_file(&cfg,szFile))
   {
     fprintf(stderr, "%s:%d - %s\n", config_error_file(&cfg),
@@ -79,57 +85,51 @@ int main(int argc,char *argv[])
   }
 
   setting=config_lookup(&cfg, "folders");
-  if(setting != NULL)
-  {
-    num_watch_files = config_setting_length(setting);
-    int i,n1,n2,n3;
-    
-    for(i = 0; i < num_watch_files; ++i)
-    {
-      config_setting_t *folder = config_setting_get_elem(setting, i);
-
-      const char *path, *file, *script;
-      
-      n1=config_setting_lookup_string(folder, "path", &path);
-      
-      n2=config_setting_lookup_string(folder, "file", &file);
-      
-      n3=config_setting_lookup_string(folder, "script", &script);
-
-      printf(".");
-      if(n1==0) printf("error n1\n");
-      if(n2==0) printf("error n2\n");
-      if(n3==0) printf("error n3\n");
-      
-
-      printf("%-20s  %-20s  %-20s\n", path,file,script);
-
-      scanDirectory(path,(const char*)file,(const char*)script);
-
-
-    }
-    putchar('\n');
-  } else
-  {
-    printf("could not read config file\n");
-  }
-
   int n=config_lookup_int(&cfg, "sleep_time", &sleep_time);
   if(n==0)
   {
     
   }
-  
-#ifdef DAEMONIZE  
-//  daemon();
-#endif
-  
   sprintf(szMessage,"watching %d folders every %d seconds",
           num_watch_files,sleep_time);
   locallog(szMessage);
+  
+  while(run)
+  {
+    if(setting != NULL)
+    {
+      num_watch_files = config_setting_length(setting);
+      int i,n1,n2,n3;
+    
+      for(i = 0; i < num_watch_files; ++i)
+      {
+        config_setting_t *folder = config_setting_get_elem(setting, i);
 
+        const char *path, *file, *script;
+      
+        n1=config_setting_lookup_string(folder, "path", &path);
+      
+        n2=config_setting_lookup_string(folder, "file", &file);
+      
+        n3=config_setting_lookup_string(folder, "script", &script);
 
+        printf(".");
+        if(n1==0) printf("error n1\n");
+        if(n2==0) printf("error n2\n");
+        if(n3==0) printf("error n3\n");
 
+        printf("%-20s  %-20s  %-20s\n", path,file,script);
+
+        scanDirectory(path,(const char*)file,(const char*)script);
+      }
+      putchar('\n');
+    } else
+    {
+      printf("could not read config file\n");
+    }
+
+    sleep(sleep_time);
+  }
   
   config_destroy(&cfg);
   return(EXIT_SUCCESS);
@@ -229,6 +229,8 @@ scanDirectory(const char* dir,const char* pattern,const char* script)
   char szMD5Old[256];
   char szFile[256];
   char szFile5[256];
+
+  printf("scanning %s for %s...\n",dir,pattern);
   
   dp = opendir (dir);
   if (dp != NULL)
