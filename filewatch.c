@@ -68,12 +68,9 @@ int main(int argc,char *argv[])
     exit(-1);
   }
   
-#ifdef DAEMONIZE  
-//  daemon();
-#endif
   config_init(&cfg);
 
-  printf("reading config file [%s]\n",szFile);
+//  printf("reading config file [%s]\n",szFile);
 
   
   if(! config_read_file(&cfg,szFile))
@@ -90,6 +87,12 @@ int main(int argc,char *argv[])
   {
     
   }
+  n=config_lookup_int(&cfg, "daemon_mode", &daemon_mode);
+  if(n==0)
+  {
+    
+  }
+
   sprintf(szMessage,"watching %d folders every %d seconds",
           num_watch_files,sleep_time);
   locallog(szMessage);
@@ -113,12 +116,12 @@ int main(int argc,char *argv[])
       
         n3=config_setting_lookup_string(folder, "script", &script);
 
-        printf(".");
+//        printf(".");
         if(n1==0) printf("error n1\n");
         if(n2==0) printf("error n2\n");
         if(n3==0) printf("error n3\n");
 
-        printf("%-20s  %-20s  %-20s\n", path,file,script);
+//        printf("%-20s  %-20s  %-20s\n", path,file,script);
 
         scanDirectory(path,(const char*)file,(const char*)script);
       }
@@ -230,7 +233,7 @@ scanDirectory(const char* dir,const char* pattern,const char* script)
   char szFile[256];
   char szFile5[256];
 
-  printf("scanning %s for %s...\n",dir,pattern);
+//  printf("scanning %s for %s...\n",dir,pattern);
   
   dp = opendir (dir);
   if (dp != NULL)
@@ -260,16 +263,16 @@ scanDirectory(const char* dir,const char* pattern,const char* script)
             sprintf(szMessage,"new md5 [%s] for [%s]",
                     szMD5Old,szFile);
             locallog(szMessage);
-            doScript(szFile,script);
             genMD5(dir,szFile,szFile5);
+            doScript(szFile,script);
           }
         } else
         {
           // did not exist
           sprintf(szMessage,"no old md5 for [%s]",szFile);
           locallog(szMessage);
-          doScript(szFile,script);
           genMD5(dir,szFile,szFile5);
+          doScript(szFile,script);
         }
         
       }

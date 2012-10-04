@@ -35,8 +35,18 @@ push:
 	 git push origin version2
 
 
-test: filewatch
+test1: filewatch
 	clear;
-	./$(TARGET) tests/test.cfg
+	-rm tests/1/*.md5
+	./$(TARGET) tests/test1.cfg
+
+test2: filewatch
+	clear;
+	./$(TARGET) tests/test2.cfg
+
+test3: filewatch
+	clear;
+	-rm tests/1/*.md5
+	./$(TARGET) tests/test3.cfg
 
 
