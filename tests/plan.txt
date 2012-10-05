@@ -1,0 +1,13 @@
+first test a specific file
+- look in the 1 folder
+- delete the md5
+- run the program to look for that specific file
+- it should be found and script executed
+- the script should move it into a 2 folder
+
+now look for the general file
+- program now looks in the 2 folder
+- finds the file, runs script to put it into the 1 folder
+
+now look for the specific
+- program looks in 1 folder, finds md3 and stops

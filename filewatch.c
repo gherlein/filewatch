@@ -2,222 +2,297 @@
 
   filewatch.c
 
-  Copyright (c) 2008-2009 Gregory C. Herlein.
+  Copyright (c) 2008-2012 Gregory C. Herlein.
   
   Written by Greg Herlein <gherlein@herlein.com>
   
 ------------------------------------------------------------------------*/
 
-/*----------------------------< Defines >-------------------------------*/
-#define DEBUG_PRINT
-#define POLLING_METHOD
-
-#define QUEUE_LEN 128
-#define BUF_LEN   256
-#define MAX_WATCH_FILES 16
-#define FILEWATCH "filewatch"
-
 /*----------------------------< Includes >------------------------------*/
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <linux/inotify.h>
+#include <sys/types.h>
+#include <dirent.h>     
+#include <fnmatch.h>
+
+#include <libconfig.h>
+#include "md5.h"
+
+/*----------------------------< Defines >-------------------------------*/
+#define BUF_LEN          256
+#define MAX_WATCH_FILES 1024
+
+#define OPCODE_READ     1
+#define OPCODE_WRITE    2
 
 /*--------------------------< Declarations >----------------------------*/
-int ReadFileData(char* szIni,int num_files);
-void print_event(struct inotify_event *event);
 static void locallog(char* szMessage);
-void        DoFileCommand(int x);
+int md5fileop(const char* filename,char* buffer, int opcode);
+int doScript(const char* file,const char* script);
+int genMD5(const char* dir, const char* file,const char* file5);
+int scanDirectory(const char* dir,const char* pattern,const char* script);
 
-struct watch_list_t
-{
-  char         szFile[BUF_LEN];
-  char         szCommand[BUF_LEN];
-  char         szMD5[BUF_LEN];
-  int          wd;
-};
 /*------------------------< Global Variables >--------------------------*/
-struct watch_list_t     watch_list[MAX_WATCH_FILES];
+
+int                     daemon_mode=0;
+char                    szMessage[BUF_LEN];
+
 /*-------------------------< Local Variables >--------------------------*/
-/*----------------------------------------------------------------------*/
 int main(int argc,char *argv[])
 {
+  char*                   szFile=NULL;
+  int                     num_watch_files=0;
+  int                     sleep_time=60;
+  int                     run=1;
+#if 0
   int                     fd,wd,x;
   ssize_t                 len,i;
-  struct inotify_event    equeue[QUEUE_LEN];
-  struct watch_list_t*    pwatch_list = watch_list;
   char                    szCommand[BUF_LEN];
-  char                    szMessage[BUF_LEN];
-  char*                   szFile=NULL;
   char                    szBuffer[BUF_LEN];
-  int                     num_watch_files=0;
   int                     nDiff=0;
-  char                    szMD5new[BUF_LEN];
-  int                     sleep_time=60;
+#endif
   
+  config_t cfg;
+  config_setting_t *setting;
+
   if(argc>1)
   {
     szFile=argv[1];
   } else
   {
-    printf("Use:  %s [ini filename]\n",argv[0]);
+    printf("Use:  %s [cfg-file]\n",argv[0]);
     exit(-1);
   }
   
-#ifdef DAEMONIZE  
-  daemon();
-#endif
+  config_init(&cfg);
+
+//  printf("reading config file [%s]\n",szFile);
+
   
-  /* get the number of files to watch */
-  x=ReadIniArg(szFile, FILEWATCH,"num_files",szBuffer,BUF_LEN);
-  if(x)
+  if(! config_read_file(&cfg,szFile))
   {
-    num_watch_files=atoi(szBuffer);
-  }
-  
-  /* get the sleep time  */
-  x=ReadIniArg(szFile, FILEWATCH,"sleep_time",szBuffer,BUF_LEN);
-  if(x)
-  {
-    sleep_time=atoi(szBuffer);
+    fprintf(stderr, "%s:%d - %s\n", config_error_file(&cfg),
+            config_error_line(&cfg), config_error_text(&cfg));
+    config_destroy(&cfg);
+    return(EXIT_FAILURE);
   }
 
-  sprintf(szMessage,"watching %d files every %d seconds",
+  setting=config_lookup(&cfg, "folders");
+  int n=config_lookup_int(&cfg, "sleep_time", &sleep_time);
+  if(n==0)
+  {
+    
+  }
+  n=config_lookup_int(&cfg, "daemon_mode", &daemon_mode);
+  if(n==0)
+  {
+    
+  }
+
+  sprintf(szMessage,"watching %d folders every %d seconds",
           num_watch_files,sleep_time);
   locallog(szMessage);
   
-
-  
-  /* set up the basic paramters */
-  ReadFileData(szFile,num_watch_files);
-  memset(equeue,0,sizeof(struct inotify_event)*QUEUE_LEN);
-  fd=inotify_init();
-  if(fd==-1)
+  while(run)
   {
-    perror("inotify_init");
-    exit(EXIT_FAILURE);
-  }
-
-  /* do the work */
-  for(x=0;x<num_watch_files;x++)
-  {
-    watch_list[x].wd=inotify_add_watch(fd,
-                                       watch_list[x].szFile,
-                                       IN_CLOSE_WRITE);
-
-    sprintf(szMessage,"watching %s",watch_list[x].szFile);
-    locallog(szMessage);
-  }
-
-#ifdef EVENT_QUEUE_METHOD  
-  while(1)
-  {
-    len = read (fd,equeue,QUEUE_LEN);
-    i=0;
-    while(i<len)
+    if(setting != NULL)
     {
-      struct inotify_event *event = (struct inotify_event*) &equeue[i];
-      if(event->mask && IN_CLOSE_WRITE)
+      num_watch_files = config_setting_length(setting);
+      int i,n1,n2,n3;
+    
+      for(i = 0; i < num_watch_files; ++i)
       {
-        print_event(event);
-        for(x=0;x<MAX_WATCH_FILES;x++)
-        {
-          if(event->wd == watch_list[x].wd)
-          {
-            sprintf(szMessage,"file %s closed",watch_list[x].szFile);
-            locallog(szMessage);
+        config_setting_t *folder = config_setting_get_elem(setting, i);
 
-            /* check the MD5 to see if the file changed */
-            MD5File(watch_list[x].szFile,szMD5new);
-            nDiff=strcmp(watch_list[x].szMD5,szMD5new);
-            if(nDiff)
-            {
-              DoFileCommand(x);
-              strcpy(watch_list[x].szMD5,szMD5new);
-            }
-          }
-        }
+        const char *path, *file, *script;
+      
+        n1=config_setting_lookup_string(folder, "path", &path);
+      
+        n2=config_setting_lookup_string(folder, "file", &file);
+      
+        n3=config_setting_lookup_string(folder, "script", &script);
+
+//        printf(".");
+        if(n1==0) printf("error n1\n");
+        if(n2==0) printf("error n2\n");
+        if(n3==0) printf("error n3\n");
+
+//        printf("%-20s  %-20s  %-20s\n", path,file,script);
+
+        scanDirectory(path,(const char*)file,(const char*)script);
       }
-      i++;
+      putchar('\n');
+    } else
+    {
+      printf("could not read config file\n");
     }
-    sleep(2);
-  }
-  inotify_rm_watch(fd);
-#endif
 
-#ifdef POLLING_METHOD
-  while(1)
-  {
     sleep(sleep_time);
-    for(x=0;x<num_watch_files;x++)
-    {
-      /* check the MD5 to see if the file changed */
-      MD5File(watch_list[x].szFile,szMD5new);
-      nDiff=strcmp(watch_list[x].szMD5,szMD5new);
-      if(nDiff)
-      {
-        DoFileCommand(x);
-        strcpy(watch_list[x].szMD5,szMD5new);
-        sprintf(szMessage,"file %s new MD5: %s",
-                watch_list[x].szFile,
-                watch_list[x].szMD5);
-        locallog(szMessage);
-      }
-    }
   }
-#endif
   
+  config_destroy(&cfg);
+  return(EXIT_SUCCESS);
 }
 /*----------------------------------------------------------------------*/
-void
-DoFileCommand(int x)
+static void
+locallog(char* szMessage)
 {
-  char                    szMessage[BUF_LEN];
-
-  system(watch_list[x].szCommand);
-  sprintf(szMessage,"executed: %s",watch_list[x].szCommand);
-  locallog(szMessage);
+  syslog(LOG_DAEMON|LOG_DEBUG,"filewatch: %s",szMessage);
+  if(daemon_mode==0)
+  {
+    printf("%s\n",szMessage);
+  }
+  return;
 }
 /*----------------------------------------------------------------------*/
 int
-ReadFileData(char* szIni, int num_files)
+md5fileop(const char* filename,char* buffer, int opcode)
 {
-  char szBase[]="file_";
-  char szFile[16];
-  int  x=0;
-  int  n=0;
-
-  num_files++;
-  for(x=0;x<num_files;x++)
+  FILE *file;
+  unsigned long len;
+  
+  if(opcode==OPCODE_READ)
   {
-    sprintf(szFile,"%s%d",szBase,x+1);
-    n=ReadIniArg(szIni,szFile,"filename",
-                 watch_list[x].szFile,
-                 BUF_LEN);
-    if(n=0) return -1;
-      
-    n=ReadIniArg(szIni,szFile,"script",
-                 watch_list[x].szCommand,
-                 BUF_LEN);
-    if(n==0) return -1;
-
-    MD5File(watch_list[x].szFile,watch_list[x].szMD5);
-
-#ifdef DEBUG_PRINT
-    printf("%d: %s [%s] {%s}\n",
-           x,
-           watch_list[x].szFile,
-           watch_list[x].szCommand,
-           watch_list[x].szMD5);
-#endif
+    file = fopen(filename, "rb");
+    if (!file)
+    {
+      return -1;
+    }
+    
+    fseek(file, 0, SEEK_END);
+    len=ftell(file);
+    fseek(file, 0, SEEK_SET);
+    
+    fread(buffer, len, 1, file);
+    fclose(file);
+    
+    return len;
+  }
+  if(opcode==OPCODE_WRITE)
+  {
+    file = fopen(filename, "wb");
+    if (!file)
+    {
+      return -1;
+    }
+    
+    len=strlen(buffer);
+    fwrite(buffer, len, 1, file);
+    fclose(file);
+    
+    return len;
     
   }
-  return x+1;
+  
+  return -1;
 }
+/*----------------------------------------------------------------------*/
+int
+doScript(const char* file,const char* script)
+{
+  char command[256];
+  
+  sprintf(command,"%s %s",script,file);
+  sprintf(szMessage,"executing command line: [%s}",command);
+  locallog(szMessage);
+  int n=system(command);
+  if(n==-1)
+  {
+    locallog("error executing command");
+    return n;
+  }
+  else return n;
+}
+/*----------------------------------------------------------------------*/
+int
+genMD5(const char* dir, const char* file,const char* file5)
+{
+  char szMD5New[256];
+  
+  int len=MD5File((char*)file,szMD5New);
+  if(len>0)
+  {
+    sprintf(szMessage,"new md5 [%s] generated for [%s]",szMD5New,file);
+    locallog(szMessage);
+    int md5len=md5fileop(file5,szMD5New,OPCODE_WRITE);
+    return md5len;
+  } else return -1;
+}
+/*----------------------------------------------------------------------*/
+int
+scanDirectory(const char* dir,const char* pattern,const char* script)
+{
+  DIR *dp;
+  struct dirent *ep;
+  char szMD5New[256];
+  char szMD5Old[256];
+  char szFile[256];
+  char szFile5[256];
 
+//  printf("scanning %s for %s...\n",dir,pattern);
+  
+  dp = opendir (dir);
+  if (dp != NULL)
+  {
+    while ((ep = readdir (dp)))
+    {
+      int n=fnmatch (pattern, ep->d_name, 0);
+      if(n==0)
+      {
+        // look to see if an md5 file exists
+        sprintf(szFile,"%s/%s",dir,ep->d_name);
+        sprintf(szFile5,"%s.%s",szFile,"md5");
+        int md5len=md5fileop(szFile5,szMD5Old,OPCODE_READ);
+        if(md5len>0)
+        {
+          // exists
+          int len=MD5File(szFile,szMD5New);
+          int match=strncmp(szMD5New,szMD5Old,len);
+          if(match==0)
+          {
+            sprintf(szMessage,"old md5 detected [%s] and matched for [%s]",
+                    szMD5Old,szFile);
+            locallog(szMessage);
+          } else
+          {
+            // new md5 means file changed
+            sprintf(szMessage,"new md5 [%s] for [%s]",
+                    szMD5Old,szFile);
+            locallog(szMessage);
+            genMD5(dir,szFile,szFile5);
+            doScript(szFile,script);
+          }
+        } else
+        {
+          // did not exist
+          sprintf(szMessage,"no old md5 for [%s]",szFile);
+          locallog(szMessage);
+          genMD5(dir,szFile,szFile5);
+          doScript(szFile,script);
+        }
+        
+      }
+    }
+    (void) closedir (dp);
+  }
+  else
+    perror ("Couldn't open the directory");
+  
+  return 0;
+}
 /*----------------------------------------------------------------------*/
 /*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
+#ifdef INOTIFY
 void print_event(struct inotify_event *event)
 {
   if(event->len > 0)
@@ -236,17 +311,7 @@ void print_event(struct inotify_event *event)
   printf("\n");
   return;
 }
-/*----------------------------------------------------------------------*/
-static void
-locallog(char* szMessage)
-{
-  syslog(LOG_DAEMON|LOG_DEBUG,szMessage);
-#ifdef DEBUG_PRINT
-  printf("%s\n",szMessage);
-#endif  
-  
-  return;
-}
+#endif
 /*----------------------------------------------------------------------*/
 /*----------------------------------------------------------------------*/
 
