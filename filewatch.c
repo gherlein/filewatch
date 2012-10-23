@@ -138,6 +138,34 @@ int main(int argc,char *argv[])
   return(EXIT_SUCCESS);
 }
 /*----------------------------------------------------------------------*/
+static int
+checkOpen(char* file)
+{
+  FILE *fp;
+  int status;
+  char path[1035];
+  char cmd[1035];
+
+  sprintf(cmd,"/usr/bin/lsof |grep %s",file);
+
+  fp = popen(cmd, "r");
+  if (fp == NULL) {
+    return 1;
+  }
+
+  while (fgets(path, sizeof(path)-1, fp) != NULL)
+  {
+    // any result means it's open
+    return 1;
+  }
+
+  /* close */
+  pclose(fp);
+  
+  return 0;
+}
+/*----------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
 static void
 locallog(char* szMessage)
 {
@@ -263,16 +291,28 @@ scanDirectory(const char* dir,const char* pattern,const char* script)
             sprintf(szMessage,"new md5 [%s] for [%s]",
                     szMD5Old,szFile);
             locallog(szMessage);
-            genMD5(dir,szFile,szFile5);
-            doScript(szFile,script);
+
+            // if it's open, do nothing
+            int n=checkOpen(szFile);
+            if(n==0)
+            {
+              genMD5(dir,szFile,szFile5);
+              doScript(szFile,script);
+            }
           }
         } else
         {
           // did not exist
           sprintf(szMessage,"no old md5 for [%s]",szFile);
           locallog(szMessage);
-          genMD5(dir,szFile,szFile5);
-          doScript(szFile,script);
+
+          // if it's open, do nothing
+          int n=checkOpen(szFile);
+          if(n==0)
+          {
+            genMD5(dir,szFile,szFile5);
+            doScript(szFile,script);
+          }
         }
         
       }

@@ -4,7 +4,7 @@ OUTFLAG    = -o
 LDFLAGS    = 		
 LIBS       = -lconfig			
 OBJS       = md5c.o
-TARGET     = filewatch
+TARGET     = filewatcher
 
 all:  $(TARGET)
 
@@ -15,7 +15,7 @@ libconfig:
 	cd libconfig-1.4.8;
 	./configure;make;sudo make install
 
-filewatch: $(OBJS) filewatch.c inifile.c md5c.c
+filewatcher: $(OBJS) filewatch.c inifile.c md5c.c
 	$(CC) $(CFLAGS) $(OUTFLAG) $@ filewatch.c $(OBJS) $(INCLUDEDIR) $(LIBDIR) $(LDFLAGS) $(LIBS) 
 
 clean:
