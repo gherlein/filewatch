@@ -18,6 +18,11 @@
 #include <sys/types.h>
 #include <dirent.h>     
 #include <fnmatch.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+
 
 #include <libconfig.h>
 #include "md5.h"
@@ -67,12 +72,12 @@ int main(int argc,char *argv[])
     printf("Use:  %s [cfg-file]\n",argv[0]);
     exit(-1);
   }
-  
+
+
   config_init(&cfg);
 
 //  printf("reading config file [%s]\n",szFile);
 
-  
   if(! config_read_file(&cfg,szFile))
   {
     fprintf(stderr, "%s:%d - %s\n", config_error_file(&cfg),
@@ -93,9 +98,48 @@ int main(int argc,char *argv[])
     
   }
 
-  sprintf(szMessage,"watching %d folders every %d seconds",
-          num_watch_files,sleep_time);
+  sprintf(szMessage,"watching every %d seconds",sleep_time);
   locallog(szMessage);
+
+  if(daemon_mode==1)
+  {
+    /* Our process ID and Session ID */
+    pid_t pid, sid;
+
+    /* Fork off the parent process */
+    pid = fork();
+    if (pid < 0) {
+      exit(EXIT_FAILURE);
+    }
+    /* If we got a good PID, then
+       we can exit the parent process. */
+    if (pid > 0) {
+      exit(EXIT_SUCCESS);
+    }
+
+    /* Change the file mode mask */
+    umask(0);
+
+    /* Open any logs here */
+
+    /* Create a new SID for the child process */
+    sid = setsid();
+    if (sid < 0) {
+      /* Log the failure */
+      exit(EXIT_FAILURE);
+    }
+
+    /* Change the current working directory */
+    if ((chdir("/")) < 0) {
+      /* Log the failure */
+      exit(EXIT_FAILURE);
+    }
+
+    /* Close out the standard file descriptors */
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+  }
   
   while(run)
   {
@@ -142,7 +186,6 @@ static int
 checkOpen(char* file)
 {
   FILE *fp;
-  int status;
   char path[1035];
   char cmd[1035];
 
@@ -282,9 +325,11 @@ scanDirectory(const char* dir,const char* pattern,const char* script)
           int match=strncmp(szMD5New,szMD5Old,len);
           if(match==0)
           {
+#ifdef LOG_ALL
             sprintf(szMessage,"old md5 detected [%s] and matched for [%s]",
                     szMD5Old,szFile);
             locallog(szMessage);
+#endif
           } else
           {
             // new md5 means file changed
